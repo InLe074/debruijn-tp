@@ -115,7 +115,7 @@ def build_kmer_dict(fastq_file, kmer_size) :
     return kmer_dict
 
 
-def build_graph(kmer_dict: Dict[str, int]) :
+def build_graph(kmer_dict: dict[str, int]) :
     """Build the debruijn graph
 
     :param kmer_dict: A dictionnary object that identify all kmer occurrences.
@@ -188,23 +188,26 @@ def select_best_path(graph, path_list, path_length, weight_avg_list,
     :param delete_sink_node: (boolean) True->We remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    weight_standard_deviation = statistics.stdev(weight_avg_list)
-    length_standard_deviation = statistics.stdev(path_length)
-    selected_path_index = None
-
-    if weight_standard_deviation > 0:
-        selected_path_index = weight_avg_list.index(max(weight_avg_list))
-    elif length_standard_deviation > 0:
-        selected_path_index = path_length.index(max(path_length))
+    stdev_w = statistics.stdev(weight_avg_list)
+   
+    stdev_l = statistics.stdev(path_length)
+   
+    path_ind = None
+   
+    if stdev_w > 0:
+        path_ind = weight_avg_list.index(max(weight_avg_list))
+    elif stdev_l > 0:
+        path_ind = path_length.index(max(path_length))
     else:
-        selected_path_index = random.randint(0, len(path_length) - 1)
+        path_ind = random.randint(0, len(path_length) - 1)
 
-    path_list.pop(selected_path_index)
+    path_list.pop(path_ind)
     modified_graph = graph.copy()
 
-    modified_graph = remove_paths(graph, path_list, delete_entry_node, delete_sink_node)
-
+    modified_graph = remove_paths(graph, path_list , delete_entry_node, delete_sink_node)
+   
     return modified_graph
+
 
 def path_average_weight(graph, path):
     """Compute the weight of a path
@@ -267,18 +270,23 @@ def solve_entry_tips(graph, starting_nodes):
     :param graph: (nx.DiGraph) A directed graph object
     :return: (nx.DiGraph) A directed graph object
     """
-    modified_graph = graph.copy()
-    
-    for node in starting_nodes:
-        predecessors = list(graph.predecessors(node))
-        
-        if len(predecessors) > 1:
-            for i in range(len(predecessors)):
-                for j in range(i + 1, len(predecessors)):
-                    if graph.has_edge(predecessors[i], predecessors[j]):
-                        modified_graph.remove_edge(predecessors[i], predecessors[j])
-    
-    return modified_graph
+    for node in graph:
+        node_pred = list(graph.predecessors(node))
+        if len(node_pred) > 1:
+            valid_paths = []
+            for node_start_i in starting_nodes:
+                paths = list(nx.all_simple_paths(graph, node_start_i, node))
+                valid_paths.extend([path[0] for path in paths if len(path) > 0])
+            
+            lengths = [len(path) - 1 for path in valid_paths]
+            weights = [path_average_weight(graph, path) if lengths[i] > 1 else graph.get_edge_data(*path)["weight"]
+                    for i, path in enumerate(valid_paths)]
+
+            graph = select_best_path(graph, valid_paths, lengths, weights, delete_entry_node=True, delete_sink_node=False)
+            graph = solve_entry_tips(graph, starting_nodes)
+            break
+
+    return graph
 
 def solve_out_tips(graph, ending_nodes):
     """Remove out tips
@@ -286,18 +294,23 @@ def solve_out_tips(graph, ending_nodes):
     :param graph: (nx.DiGraph) A directed graph object
     :return: (nx.DiGraph) A directed graph object
     """
-    modified_graph = graph.copy()
-    
-    for node in ending_nodes:
-        successors = list(graph.successors(node))
-        
-        if len(successors) > 1:
-            for i in range(len(successors)):
-                for j in range(i + 1, len(successors)):
-                    if graph.has_edge(successors[i], successors[j]):
-                        modified_graph.remove_edge(successors[i], successors[j])
-    
-    return modified_graph
+    for node in graph:
+        node_success = list(graph.successors(node))
+        if len(node_success) > 1:
+            valid_paths = []
+            for node_end_i in ending_nodes:
+                paths = list(nx.all_simple_paths(graph, node, node_end_i))
+                valid_paths.extend([path[0] for path in paths if len(path) > 0])
+            
+            lengths = [len(path) - 1 for path in valid_paths]
+            weights = [path_average_weight(graph, path) if lengths[i] > 1 else graph.get_edge_data(*path)["weight"]
+                    for i, path in enumerate(valid_paths)]
+
+            graph = select_best_path(graph, valid_paths, lengths, weights, delete_entry_node=False, delete_sink_node=True)
+            graph = solve_out_tips(graph, ending_nodes)
+            break
+
+    return graph
 
 def get_starting_nodes(graph):
     """Get nodes without predecessors
