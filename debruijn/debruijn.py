@@ -26,6 +26,7 @@ import statistics
 import textwrap
 import matplotlib.pyplot as plt
 matplotlib.use("Agg")
+import itertools
 
 __author__ = "Lebib Ines"
 __copyright__ = "Universite Paris Diderot"
@@ -188,25 +189,28 @@ def select_best_path(graph, path_list, path_length, weight_avg_list,
     :param delete_sink_node: (boolean) True->We remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    stdev_w = statistics.stdev(weight_avg_list)
-   
-    stdev_l = statistics.stdev(path_length)
-   
-    path_ind = None
-   
-    if stdev_w > 0:
-        path_ind = weight_avg_list.index(max(weight_avg_list))
-    elif stdev_l > 0:
-        path_ind = path_length.index(max(path_length))
+    stdev_weight = statistics.stdev(weight_avg_list)
+    path_slected = None
+
+    if stdev_weight > 0:
+        max_weight = max(weight_avg_list)
+        path_slected = path_list[weight_avg_list.index(max_weight)]
     else:
-        path_ind = random.randint(0, len(path_length) - 1)
+        length_stdev = statistics.stdev(path_length)
+        
+        if length_stdev > 0:
+            max_length = max(path_length)
+            path_slected = path_list[path_length.index(max_length)]
+        else:
+            random_idx = random.randint(0, len(path_list) - 1)
+            path_slected = path_list[random_idx]
 
-    path_list.pop(path_ind)
-    modified_graph = graph.copy()
+    for path in path_list:
+        if path != path_slected:
+            remove_path = path[1:-1] if delete_entry_node and delete_sink_node else path[1:] if delete_entry_node else path[:-1] if delete_sink_node else path
+            graph.remove_nodes_from(remove_path)
 
-    modified_graph = remove_paths(graph, path_list , delete_entry_node, delete_sink_node)
-   
-    return modified_graph
+    return graph
 
 
 def path_average_weight(graph, path):
@@ -228,7 +232,7 @@ def solve_bubble(graph, ancestor_node, descendant_node):
     """
     paths = list(nx.all_simple_paths(graph, ancestor_node, descendant_node))
     weigths = [path_average_weight(graph, path) for path in paths]
-    lengths = [len(path) - 1 for path in paths]
+    lengths = [len(path) for path in paths]
     solved_bubble = select_best_path(graph, paths, lengths, weigths)
     return solved_bubble
 
@@ -244,13 +248,12 @@ def simplify_bubbles(graph):
         predecessors = list(graph.predecessors(node))
 
         if len(predecessors) > 1:
-            for i in range(len(predecessors)):
-                for j in range(i + 1, len(predecessors)):
-                    ancestor_node = nx.lowest_common_ancestor(graph, predecessors[i], predecessors[j])
+            for i, j in itertools.combinations(predecessors, 2):
+                ancestor_node = nx.lowest_common_ancestor(graph, i, j)
 
-                    if ancestor_node is not None:
-                        bubble = True
-                        break
+                if ancestor_node is not None:
+                    bubble = True
+                    break
 
         if bubble:
             break
