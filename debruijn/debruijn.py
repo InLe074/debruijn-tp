@@ -190,27 +190,24 @@ def select_best_path(graph, path_list, path_length, weight_avg_list,
     :return: (nx.DiGraph) A directed graph object
     """
     stdev_weight = statistics.stdev(weight_avg_list)
-    path_slected = None
-
+   
+    stdev_length = statistics.stdev(path_length)
+   
+    path_ind = None
+   
     if stdev_weight > 0:
-        max_weight = max(weight_avg_list)
-        path_slected = path_list[weight_avg_list.index(max_weight)]
+        path_ind = weight_avg_list.index(max(weight_avg_list))
+    elif stdev_length > 0:
+        path_ind = path_length.index(max(path_length))
     else:
-        length_stdev = statistics.stdev(path_length)
-        
-        if length_stdev > 0:
-            max_length = max(path_length)
-            path_slected = path_list[path_length.index(max_length)]
-        else:
-            random_idx = random.randint(0, len(path_list) - 1)
-            path_slected = path_list[random_idx]
+        path_ind = random.randint(0, len(path_length) - 1)
 
-    for path in path_list:
-        if path != path_slected:
-            remove_path = path[1:-1] if delete_entry_node and delete_sink_node else path[1:] if delete_entry_node else path[:-1] if delete_sink_node else path
-            graph.remove_nodes_from(remove_path)
+    path_list.pop(path_ind)
+    modif_graph = graph.copy()
 
-    return graph
+    modif_graph = remove_paths(graph, path_list , delete_entry_node, delete_sink_node)
+   
+    return modif_graph
 
 
 def path_average_weight(graph, path):
